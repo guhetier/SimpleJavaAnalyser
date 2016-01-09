@@ -1,0 +1,20 @@
+java_parser.cmi : localizing.cmi java_syntax.cmo
+localizing.cmi :
+analyzer.cmo : simple_java_translate.cmo simple_java_syntax.cmo \
+    localizing.cmi java_parser.cmi java_lexer.cmo
+analyzer.cmx : simple_java_translate.cmx simple_java_syntax.cmx \
+    localizing.cmx java_parser.cmx java_lexer.cmx
+interpreter.cmo : simple_java_syntax.cmo
+interpreter.cmx : simple_java_syntax.cmx
+java_lexer.cmo : localizing.cmi java_parser.cmi
+java_lexer.cmx : localizing.cmx java_parser.cmx
+java_parser.cmo : localizing.cmi java_syntax.cmo java_parser.cmi
+java_parser.cmx : localizing.cmx java_syntax.cmx java_parser.cmi
+java_syntax.cmo : localizing.cmi
+java_syntax.cmx : localizing.cmx
+localizing.cmo : localizing.cmi
+localizing.cmx : localizing.cmi
+simple_java_syntax.cmo : localizing.cmi
+simple_java_syntax.cmx : localizing.cmx
+simple_java_translate.cmo : simple_java_syntax.cmo java_syntax.cmo
+simple_java_translate.cmx : simple_java_syntax.cmx java_syntax.cmx
