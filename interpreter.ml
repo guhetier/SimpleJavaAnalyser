@@ -15,7 +15,7 @@ open Simple_java_syntax
  * proc : className, procName <-> proc instruction
  *)
 type env = {
-    var : (s_var, s_constant option) Hashtbl.t;
+    var : (s_uniqueId, s_constant option) Hashtbl.t;
     proc : ((string*string), s_block) Hashtbl.t
 }
 
@@ -24,6 +24,15 @@ let check_type t a =
     | Sc_int _ -> if t <> St_int then failwith "Invalid type : St_int expected"
     | Sc_bool _ -> if t <> St_bool then failwith "Invalid type : St_bool expected"
 
+(*
+ * Interpret variable access
+ *)
+let interpret_var env var = 
+    match (try Hashtbl.find env.var var.s_var_uniqueId with Not_found -> failwith "Undeclared variable")
+    with
+    | Some v -> v
+    | None -> failwith "Non initialized variable"
+                        
 (*
  * Interpret unary operators
  *)
@@ -70,18 +79,22 @@ let rec interpret_unary env op e =
         match expr with
         | Se_const e -> e
         | Se_random (a,b) -> Sc_int(Int64.add a (Random.int64 (Int64.sub b a)))
-        | Se_var var -> (match (try Hashtbl.find env.var var
-                        with Not_found -> failwith "Undeclared variable") with
-                        | Some v -> v
-                        | None -> failwith "Non initialized variable"
-                        )
+        | Se_var var -> interpret_var env var
         | Se_unary (op, e) -> interpret_unary env op e
         | Se_binary (op, a, b) -> interpret_binary env op a b
 
+(*
+ * Interpret variable assignment
+ *)
+let interpret_assign env var expr =
+    match interpret_expr env expr, var.s_var_type with
+    | Sc_bool b, St_bool -> Hashtbl.replace env.var var.s_var_uniqueId (Some(Sc_bool b))
+    | Sc_int i,  St_int  -> Hashtbl.replace env.var var.s_var_uniqueId (Some (Sc_int i))
+    | _, _ -> failwith "Invalid type : variable incompatible with expression"
 
 (* 
  * Interpret conditions
-*)
+ *)
 let rec interpret_condition env cond blk1 blk2 =
     match interpret_expr env cond with
     | Sc_bool b when b -> interpret_block env blk1
@@ -93,6 +106,13 @@ let rec interpret_condition env cond blk1 blk2 =
  *)
 and interpret_loop env cond blk = failwith "Todo"
 
+(*
+ * Interpret procedure call
+ *)
+and interpret_proc env proc = 
+    let p = (try Hashtbl.find env.proc (proc.s_proc_call_class,proc.s_proc_call_name)
+    with Not_found -> failwith "Undefined procedure")
+    in interpret_block env p
 
 (*
  * Interpret assert
@@ -108,12 +128,15 @@ and interpret_assert env expr =
  *)
 and interpret_command env cmd =
     match cmd with
-    | Sc_assign (var, expr) -> failwith "Todo"
+    | Sc_assign (var, expr) -> interpret_assign env var expr
     | Sc_if (cond, blk1, blk2) -> interpret_condition env cond blk1 blk2
     | Sc_while (cond, blk) -> interpret_loop env cond blk
-    | Sc_proc_call proc_call -> failwith "TODO"
+    | Sc_proc_call proc -> interpret_proc env proc
     | Sc_assert expr -> interpret_assert env expr
 
+(*
+ * Interpret block of instructions
+ *)
 and interpret_block env blk =
     match blk with
     | [] -> ()
@@ -125,11 +148,11 @@ and interpret_block env blk =
 let interpret_var_decl env v =
     let var, init = v in
     match init with
-    | None -> Hashtbl.replace env.var var None 
-    | Some e -> Hashtbl.replace env.var var (Some (interpret_expr env e))
+    | None -> Hashtbl.replace env.var var.s_var_uniqueId None 
+    | Some e -> Hashtbl.replace env.var var.s_var_uniqueId (Some (interpret_expr env e))
 
 (*
- * List and store function
+ * List and store functions
  *)
 let interpret_proc env className p = 
     Hashtbl.replace env.proc (className, p.s_proc_name) p.s_proc_body
@@ -154,6 +177,7 @@ let interpret_program (p:s_program) : unit =
         var = Hashtbl.create 10;
         proc = Hashtbl.create 10} 
     in
+    (* Read all declration in the program *)
     let rec readDeclarations l = match l with
     | [] -> ()
     | h::q -> interpret_class env h; readDeclarations q
