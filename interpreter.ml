@@ -14,12 +14,22 @@ type env = {
     proc : ((string*string), s_block) Hashtbl.t
 }
 
-let interpret_unary env op e = failwith "TODO"
+let check_type t a =
+    match a with
+    | Sc_int _ -> if t <> St_int then failwith "Invalid type : St_int expected"
+    | Sc_bool _ -> if t <> St_bool then failwith "Invalid type : St_bool expected"
 
-let interpret_binary env op a b = failwith "TODO"
+let rec interpret_unary env op e = 
+    match op with
+    | Su_neg -> let v = interpret_expr env e in
+    (match v with 
+        | Sc_bool b -> Sc_bool (not b)
+        | _ -> failwith "Invalid type : St_bool expected")
+
+    and interpret_binary env op a b = failwith "TODO"
 
 
-let interpret_expr env (expr, ext) = 
+    and interpret_expr env (expr, ext) = 
     match expr with
     | Se_const e -> e
     | Se_random (a,b) -> Sc_int(Int64.add a (Random.int64 (Int64.sub b a)))
