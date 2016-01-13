@@ -9,6 +9,11 @@ open Simple_java_syntax
  * - 
  *)
 
+(*
+ * Program environement
+ * var : s_var <-> actual value of the variable
+ * proc : className, procName <-> proc instruction
+ *)
 type env = {
     var : (s_var, s_constant option) Hashtbl.t;
     proc : ((string*string), s_block) Hashtbl.t
@@ -19,6 +24,9 @@ let check_type t a =
     | Sc_int _ -> if t <> St_int then failwith "Invalid type : St_int expected"
     | Sc_bool _ -> if t <> St_bool then failwith "Invalid type : St_bool expected"
 
+(*
+ * Interpret unary operators
+ *)
 let rec interpret_unary env op e = 
     match op with
     | Su_neg -> let v = interpret_expr env e in
@@ -26,7 +34,9 @@ let rec interpret_unary env op e =
         | Sc_bool b -> Sc_bool (not b)
         | _ -> failwith "Invalid type : St_bool expected"
         )
-
+(*
+ * Interpret binary operators
+ *)
     and interpret_binary env op a b =
     let compute_op op va vb =
         match va, vb with
@@ -53,7 +63,9 @@ let rec interpret_unary env op e =
             )
         | _ -> compute_op op (interpret_expr env a) (interpret_expr env b)
 
-
+(*
+ * Interpret expressions
+ *)
     and interpret_expr env (expr, ext) = 
         match expr with
     | Se_const e -> e
@@ -62,15 +74,24 @@ let rec interpret_unary env op e =
     | Se_unary (op, e) -> interpret_unary env op e
     | Se_binary (op, a, b) -> interpret_binary env op a b
 
+(*
+ * List and initialize variable declaration
+ *)
 let interpret_var_decl env v =
     let var, init = v in
     match init with
     | None -> Hashtbl.replace env.var var None 
     | Some e -> Hashtbl.replace env.var var (Some (interpret_expr env e))
 
+(*
+ * List and store function
+ *)
 let interpret_proc env className p = 
     Hashtbl.replace env.proc (className, p.s_proc_name) p.s_proc_body
 
+(*
+ * Interpret class definitions
+ *)
 let interpret_class env c = 
     let rec readClassDeclaration l = match l with
     | [] -> ()
@@ -80,6 +101,9 @@ let interpret_class env c =
     )
     in readClassDeclaration c.s_class_body
 
+(*
+ * Interpret a program
+ *)
 let interpret_program (p:s_program) : unit =
     let env = {
         var = Hashtbl.create 10;
