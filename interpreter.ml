@@ -104,7 +104,11 @@ let rec interpret_condition env cond blk1 blk2 =
 (*
  * Interpret loops
  *)
-and interpret_loop env cond blk = failwith "Todo"
+and interpret_loop env cond blk = 
+    match interpret_expr env cond with
+    | Sc_bool b when b -> interpret_block env blk; interpret_loop env cond blk
+    | Sc_bool _ -> ();
+    | _ -> failwith "Invalid type : St_bool expected"
 
 (*
  * Interpret procedure call
