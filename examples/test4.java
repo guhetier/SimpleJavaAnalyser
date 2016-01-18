@@ -3,7 +3,7 @@ class Test {
     static int b = 1;
     static void main()
     {
-        while(!(a == 0)){
+        while(0 < a){
             a = a - 1;
             b = b + 1;
         }
