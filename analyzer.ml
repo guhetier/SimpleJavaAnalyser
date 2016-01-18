@@ -1,9 +1,12 @@
 open Simple_java_syntax
 
+(* Pretty print a program file *)
 let print_file file = 
+    let nline = ref 1 in
     try
         while true do
-            print_endline (input_line file)
+            Printf.printf "%i | %s\n" (!nline) (input_line file);
+            nline := !nline + 1
         done
     with End_of_file -> seek_in file 0
 
