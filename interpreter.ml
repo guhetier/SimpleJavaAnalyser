@@ -15,6 +15,15 @@ type env = {
 }
 
 (*
+ * Exception management : fail with the error and localisation
+ *)
+exception Interpretation_exception of string
+
+let fail_message (err : string) (loc : Localizing.extent) : unit =
+    failwith (Printf.sprintf "Interpretation failed on %s.  ---  Error : %s"
+    (Localizing.extent_to_string loc) err)
+
+(*
  * Diplay variables values
  *)
 let print_variables env prog =
@@ -30,17 +39,18 @@ let print_variables env prog =
 
 let check_type t a =
     match a with
-    | Sc_int _  -> if t <> St_int then failwith "Invalid type : St_int expected"
-    | Sc_bool _ -> if t <> St_bool then failwith "Invalid type : St_bool expected"
+    | Sc_int _  -> if t <> St_int then raise (Interpretation_exception "Invalid type : St_int expected")
+    | Sc_bool _ -> if t <> St_bool then raise (Interpretation_exception "Invalid type : St_bool expected")
 
 (*
  * Interpret variable access
  *)
 let interpret_var env var = 
-    match (try Hashtbl.find env.var var.s_var_uniqueId with Not_found -> failwith "Undeclared variable")
+    match (try Hashtbl.find env.var var.s_var_uniqueId
+    with Not_found -> raise (Interpretation_exception (Printf.sprintf "Undeclared variable %s" var.s_var_name)))
     with
     | Some v, _ -> v
-    | None, _   -> failwith "Non initialized variable"
+    | None, _   -> raise (Interpretation_exception (Printf.sprintf "Non initialized variable %s" var.s_var_name))
                         
 (*
  * Interpret unary operators
@@ -50,7 +60,7 @@ let rec interpret_unary env op e =
     | Su_neg -> let v = interpret_expr env e in
     (match v with 
         | Sc_bool b -> Sc_bool (not b)
-        | _         -> failwith "Invalid type : St_bool expected"
+        | _         -> raise (Interpretation_exception "Invalid type : St_bool expected")
         )
 (*
  * Interpret binary operators
@@ -63,21 +73,21 @@ let rec interpret_unary env op e =
             | Sb_sub -> Sc_int(Int64.sub ia ib)
             | Sb_mul -> Sc_int(Int64.mul ia ib)
             | Sb_div -> if ib = Int64.zero
-                        then failwith "Invalid operation : division by zero";
+                        then raise (Interpretation_exception "Invalid operation : division by zero");
                         Sc_int(Int64.div ia ib)
             | Sb_lt  -> Sc_bool(ia < ib)
             | _ -> failwith "Should not happen"
             )
-        | _, _ -> failwith "Invalid type : St_int*St_int expected"
+        | _, _ -> raise (Interpretation_exception "Invalid type : St_int*St_int expected")
     in
     match op with
         | Sb_or                  -> (match interpret_expr env a with
             | Sc_bool b1 when b1 -> Sc_bool true
             | Sc_bool b1         -> (match interpret_expr env b with
                 | Sc_bool b2 -> Sc_bool b2
-                | _          -> failwith "Invalid type : St_bool*St_bool expected"
+                | _          -> raise (Interpretation_exception "Invalid type : St_bool*St_bool expected")
                 )
-            | _ -> failwith "Invalid type : St_bool*St_bool expected"
+            | _ -> raise (Interpretation_exception "Invalid type : St_bool*St_bool expected")
             )
         | _ -> compute_op op (interpret_expr env a) (interpret_expr env b)
 
@@ -99,7 +109,7 @@ let interpret_assign env var expr =
     match interpret_expr env expr, var.s_var_type with
     | Sc_bool b, St_bool -> Hashtbl.replace env.var var.s_var_uniqueId (Some(Sc_bool b), var.s_var_name)
     | Sc_int i,  St_int  -> Hashtbl.replace env.var var.s_var_uniqueId (Some (Sc_int i), var.s_var_name)
-    | _, _ -> failwith "Invalid type : variable incompatible with expression"
+    | _, _ -> raise (Interpretation_exception "Invalid type : variable incompatible with expression")
 
 (* 
  * Interpret conditions
@@ -108,7 +118,7 @@ let rec interpret_condition env cond blk1 blk2 =
     match interpret_expr env cond with
     | Sc_bool b when b -> interpret_block env blk1
     | Sc_bool _        -> interpret_block env blk2
-    | _                -> failwith "Invalid type : St_bool expected"
+    | _                -> raise (Interpretation_exception "Invalid type : St_bool expected")
 
 (*
  * Interpret loops
@@ -117,14 +127,14 @@ and interpret_loop env cond blk =
     match interpret_expr env cond with
     | Sc_bool b when b -> interpret_block env blk; interpret_loop env cond blk
     | Sc_bool _        -> ();
-    | _                -> failwith "Invalid type : St_bool expected"
+    | _                -> raise (Interpretation_exception "Invalid type : St_bool expected")
 
 (*
  * Interpret procedure call
  *)
 and interpret_proc env proc = 
     let p = (try Hashtbl.find env.proc (proc.s_proc_call_class,proc.s_proc_call_name)
-    with Not_found -> failwith "Undefined procedure")
+    with Not_found -> raise (Interpretation_exception "Undefined procedure"))
     in interpret_block env p
 
 (*
@@ -133,8 +143,8 @@ and interpret_proc env proc =
 and interpret_assert env expr =
     match interpret_expr env expr with
     | Sc_bool b when b -> ()
-    | Sc_bool _        -> failwith "Assert failure"
-    | _                -> failwith "Invalid type : St_bool expected"
+    | Sc_bool _        -> raise (Interpretation_exception "Assert failure")
+    | _                -> raise (Interpretation_exception "Invalid type : St_bool expected")
 
 (*
  * Interpret instructions
@@ -153,7 +163,9 @@ and interpret_command env cmd =
 and interpret_block env blk =
     match blk with
     | []            -> ()
-    | (cmd, loc)::q -> interpret_command env cmd; interpret_block env q
+    | (cmd, loc)::q -> try interpret_command env cmd
+    with Interpretation_exception e -> fail_message e loc;
+    interpret_block env q
 
 (*
  * List and initialize variable declaration
