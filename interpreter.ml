@@ -5,23 +5,32 @@ open Simple_java_syntax
  *)
 
 (*
- * - chercher le main
- * - 
- *)
-
-(*
  * Program environement
  * var : s_var <-> actual value of the variable
  * proc : className, procName <-> proc instruction
  *)
 type env = {
-    var : (s_uniqueId, s_constant option) Hashtbl.t;
+    var : (s_uniqueId, s_constant option * string) Hashtbl.t;
     proc : ((string*string), s_block) Hashtbl.t
 }
 
+(*
+ * Diplay variables values
+ *)
+let print_variables env prog =
+    let print_var id (value, name) =
+        Printf.printf "%s -> " name;
+        (match value with
+        | None            -> print_string "Undefined"
+        | Some(Sc_bool b) -> print_string (if b then "True" else "False")
+        | Some(Sc_int i)  -> print_int (Int64.to_int i));
+        print_string "\n"
+    in
+    Hashtbl.iter print_var env.var
+
 let check_type t a =
     match a with
-    | Sc_int _ -> if t <> St_int then failwith "Invalid type : St_int expected"
+    | Sc_int _  -> if t <> St_int then failwith "Invalid type : St_int expected"
     | Sc_bool _ -> if t <> St_bool then failwith "Invalid type : St_bool expected"
 
 (*
@@ -30,8 +39,8 @@ let check_type t a =
 let interpret_var env var = 
     match (try Hashtbl.find env.var var.s_var_uniqueId with Not_found -> failwith "Undeclared variable")
     with
-    | Some v -> v
-    | None -> failwith "Non initialized variable"
+    | Some v, _ -> v
+    | None, _   -> failwith "Non initialized variable"
                         
 (*
  * Interpret unary operators
@@ -41,7 +50,7 @@ let rec interpret_unary env op e =
     | Su_neg -> let v = interpret_expr env e in
     (match v with 
         | Sc_bool b -> Sc_bool (not b)
-        | _ -> failwith "Invalid type : St_bool expected"
+        | _         -> failwith "Invalid type : St_bool expected"
         )
 (*
  * Interpret binary operators
@@ -62,11 +71,11 @@ let rec interpret_unary env op e =
         | _, _ -> failwith "Invalid type : St_int*St_int expected"
     in
     match op with
-        | Sb_or -> (match interpret_expr env a with
+        | Sb_or                  -> (match interpret_expr env a with
             | Sc_bool b1 when b1 -> Sc_bool true
-            | Sc_bool b1 -> (match interpret_expr env b with
+            | Sc_bool b1         -> (match interpret_expr env b with
                 | Sc_bool b2 -> Sc_bool b2
-                | _ -> failwith "Invalid type : St_bool*St_bool expected"
+                | _          -> failwith "Invalid type : St_bool*St_bool expected"
                 )
             | _ -> failwith "Invalid type : St_bool*St_bool expected"
             )
@@ -77,10 +86,10 @@ let rec interpret_unary env op e =
  *)
     and interpret_expr env (expr, ext) = 
         match expr with
-        | Se_const e -> e
-        | Se_random (a,b) -> Sc_int(Int64.add a (Random.int64 (Int64.sub b a)))
-        | Se_var var -> interpret_var env var
-        | Se_unary (op, e) -> interpret_unary env op e
+        | Se_const e           -> e
+        | Se_random (a,b)      -> Sc_int(Int64.add a (Random.int64 (Int64.sub b a)))
+        | Se_var var           -> interpret_var env var
+        | Se_unary (op, e)     -> interpret_unary env op e
         | Se_binary (op, a, b) -> interpret_binary env op a b
 
 (*
@@ -88,8 +97,8 @@ let rec interpret_unary env op e =
  *)
 let interpret_assign env var expr =
     match interpret_expr env expr, var.s_var_type with
-    | Sc_bool b, St_bool -> Hashtbl.replace env.var var.s_var_uniqueId (Some(Sc_bool b))
-    | Sc_int i,  St_int  -> Hashtbl.replace env.var var.s_var_uniqueId (Some (Sc_int i))
+    | Sc_bool b, St_bool -> Hashtbl.replace env.var var.s_var_uniqueId (Some(Sc_bool b), var.s_var_name)
+    | Sc_int i,  St_int  -> Hashtbl.replace env.var var.s_var_uniqueId (Some (Sc_int i), var.s_var_name)
     | _, _ -> failwith "Invalid type : variable incompatible with expression"
 
 (* 
@@ -98,8 +107,8 @@ let interpret_assign env var expr =
 let rec interpret_condition env cond blk1 blk2 =
     match interpret_expr env cond with
     | Sc_bool b when b -> interpret_block env blk1
-    | Sc_bool _ -> interpret_block env blk2
-    | _ -> failwith "Invalid type : St_bool expected"
+    | Sc_bool _        -> interpret_block env blk2
+    | _                -> failwith "Invalid type : St_bool expected"
 
 (*
  * Interpret loops
@@ -107,8 +116,8 @@ let rec interpret_condition env cond blk1 blk2 =
 and interpret_loop env cond blk = 
     match interpret_expr env cond with
     | Sc_bool b when b -> interpret_block env blk; interpret_loop env cond blk
-    | Sc_bool _ -> ();
-    | _ -> failwith "Invalid type : St_bool expected"
+    | Sc_bool _        -> ();
+    | _                -> failwith "Invalid type : St_bool expected"
 
 (*
  * Interpret procedure call
@@ -124,41 +133,40 @@ and interpret_proc env proc =
 and interpret_assert env expr =
     match interpret_expr env expr with
     | Sc_bool b when b -> ()
-    | Sc_bool _ -> failwith "Assert failure"
-    | _ -> failwith "Invalid type : St_bool expected"
+    | Sc_bool _        -> failwith "Assert failure"
+    | _                -> failwith "Invalid type : St_bool expected"
 
 (*
  * Interpret instructions
  *)
 and interpret_command env cmd =
     match cmd with
-    | Sc_assign (var, expr) -> interpret_assign env var expr
+    | Sc_assign (var, expr)    -> interpret_assign env var expr
     | Sc_if (cond, blk1, blk2) -> interpret_condition env cond blk1 blk2
-    | Sc_while (cond, blk) -> interpret_loop env cond blk
-    | Sc_proc_call proc -> interpret_proc env proc
-    | Sc_assert expr -> interpret_assert env expr
+    | Sc_while (cond, blk)     -> interpret_loop env cond blk
+    | Sc_proc_call proc        -> interpret_proc env proc
+    | Sc_assert expr           -> interpret_assert env expr
 
 (*
  * Interpret block of instructions
  *)
 and interpret_block env blk =
     match blk with
-    | [] -> ()
+    | []            -> ()
     | (cmd, loc)::q -> interpret_command env cmd; interpret_block env q
 
 (*
  * List and initialize variable declaration
  *)
-let interpret_var_decl env v =
-    let var, init = v in
+let interpret_var_decl env (var,init) =
     match init with
-    | None -> Hashtbl.replace env.var var.s_var_uniqueId None 
-    | Some e -> Hashtbl.replace env.var var.s_var_uniqueId (Some (interpret_expr env e))
+    | None   -> Hashtbl.replace env.var var.s_var_uniqueId (None, var.s_var_name)
+    | Some e -> Hashtbl.replace env.var var.s_var_uniqueId (Some (interpret_expr env e), var.s_var_name)
 
 (*
  * List and store functions
  *)
-let interpret_proc env className p = 
+let interpret_proc_decl env className p = 
     Hashtbl.replace env.proc (className, p.s_proc_name) p.s_proc_body
 
 (*
@@ -166,26 +174,46 @@ let interpret_proc env className p =
  *)
 let interpret_class env c = 
     let rec readClassDeclaration l = match l with
-    | [] -> ()
-    | h::q -> (match h with
-        | Sd_var v -> interpret_var_decl env v
-        | Sd_function p -> interpret_proc env c.s_class_name p
-    )
+    | []    -> ()
+    | h::q  -> (match h with
+        | Sd_var v      -> interpret_var_decl env v
+        | Sd_function p -> interpret_proc_decl env c.s_class_name p
+    );
+    readClassDeclaration q
     in readClassDeclaration c.s_class_body
+
+
+exception Found of s_block
 
 (*
  * Interpret a program
  *)
 let interpret_program (p:s_program) : unit =
+    (* Initilize random generator *)
+    Random.self_init();
     let env = {
-        var = Hashtbl.create 10;
+        var  = Hashtbl.create 10;
         proc = Hashtbl.create 10} 
     in
     (* Read all declration in the program *)
     let rec readDeclarations l = match l with
-    | [] -> ()
+    | []   -> ()
     | h::q -> interpret_class env h; readDeclarations q
-    in readDeclarations p
+    in readDeclarations p;
+
+    (* print variables at the begining of the exection *)
+    print_endline "\nBegin :\n-----------";
+    print_variables env p;
+    print_endline "------------\n";
+
+    (* Look for function main and run it *)
+    try
+        Hashtbl.iter (fun (c, f) body -> if f = "main" then raise (Found body)) env.proc
+    with Found body -> interpret_block env body;
+    (* Print variables at the end of execution *)
+    print_endline "\nEnd :\n-----------";
+    print_variables env p;
+    print_endline "------------"
 
 
 
