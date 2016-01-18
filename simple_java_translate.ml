@@ -234,7 +234,7 @@ let rec tr_statement_e (env: env) ((s, ext): statement_e): s_block * env =
 	| _ -> non_supported "complex assignment"
       end
   | Expression _ -> non_supported "non-assignment expression"
-  | Block_statement b -> non_supported "block"
+  | Block_statement b -> tr_block env b,env
   | Return None -> non_supported "return"
   | Return (Some e) -> non_supported "return"
   | Assert (e, None) -> 
