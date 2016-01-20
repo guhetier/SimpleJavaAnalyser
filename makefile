@@ -31,6 +31,8 @@ ML_FILES=	localizing.ml \
 		$(AUTOGEN_ML) \
 		simple_java_syntax.ml \
 		simple_java_translate.ml \
+        interpreter.ml \
+		verifiyer.ml\
 		analyzer.ml
 CMO_FILES=	$(ML_FILES:%.ml=%.cmo)
 CMX_FILES=      $(ML_FILES:%.ml=%.cmx)

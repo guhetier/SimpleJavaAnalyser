@@ -19,7 +19,7 @@ type env = {
  *)
 exception Interpretation_exception of string
 
-let fail_message (err : string) (loc : Localizing.extent) : unit =
+let fail_message (err : string) (loc : Localizing.extent) =
     failwith (Printf.sprintf "Interpretation failed on %s.  ---  Error : %s"
     (Localizing.extent_to_string loc) err)
 
@@ -95,12 +95,14 @@ let rec interpret_unary env op e =
  * Interpret expressions
  *)
     and interpret_expr env (expr, ext) = 
+        try (
         match expr with
         | Se_const e           -> e
         | Se_random (a,b)      -> Sc_int(Int64.add a (Random.int64 (Int64.sub b a)))
         | Se_var var           -> interpret_var env var
         | Se_unary (op, e)     -> interpret_unary env op e
         | Se_binary (op, a, b) -> interpret_binary env op a b
+        ) with Interpretation_exception e -> fail_message e ext
 
 (*
  * Interpret variable assignment

@@ -12,10 +12,14 @@ let print_file file =
 
 let main () =
     (* Parsing arguments *)
-    let f_name = ref "" and displayCode = ref false and interpret = ref false in
+    let f_name = ref ""
+    and displayCode = ref false
+    and interpret = ref false
+    and verify  = ref false in
     Arg.parse [
         ("--display", Arg.Set(displayCode), "Display program source");
-        ("--interpret", Arg.Set(interpret), "Interpret program source")
+        ("--interpret", Arg.Set(interpret), "Interpret program source");
+        ("--verify", Arg.Set(verify), "Verify program source")
     ]
     (fun s -> f_name := s) "Mini-Java analyzer";
 
@@ -41,6 +45,9 @@ let main () =
 
     (* interpret program if asked *)
     if !interpret then Interpreter.interpret_program s_prog;
+
+    (* verify program if asked *)
+    if !verify then Verifiyer.verify_program s_prog;
 
   Printf.printf "finished...\n"
 
