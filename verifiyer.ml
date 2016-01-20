@@ -212,7 +212,10 @@ and verify_block env blk =
 let verify_var_decl env (var,init) =
     match init with
     | None   -> Hashtbl.replace env.var var.s_var_uniqueId (var, Not)
-    | Some e -> Hashtbl.replace env.var var.s_var_uniqueId (var, Sure)
+    | Some e -> if verify_expr env e = var.s_var_type then
+        Hashtbl.replace env.var var.s_var_uniqueId (var, Sure)
+    else
+        raise (Interpretation_exception (Printf.sprintf "Invalid init type : variable %s incompatible with expression type" var.s_var_name))
 (*
  * List and store functions
  *)
@@ -239,7 +242,7 @@ exception Found of s_block
  * Interpret a program
  *)
 let verify_program (p:s_program) : unit =
-    (* Initilize random generator *)
+    (* Initialize random generator *)
     Random.self_init();
     let env = {
         var  = Hashtbl.create 10;
