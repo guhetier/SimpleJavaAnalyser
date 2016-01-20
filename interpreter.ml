@@ -37,11 +37,6 @@ let print_variables env prog =
     in
     Hashtbl.iter print_var env.var
 
-let check_type t a =
-    match a with
-    | Sc_int _  -> if t <> St_int then raise (Interpretation_exception "Invalid type : St_int expected")
-    | Sc_bool _ -> if t <> St_bool then raise (Interpretation_exception "Invalid type : St_bool expected")
-
 (*
  * Interpret variable access
  *)
@@ -165,8 +160,8 @@ and interpret_command env cmd =
 and interpret_block env blk =
     match blk with
     | []            -> ()
-    | (cmd, loc)::q -> try interpret_command env cmd
-    with Interpretation_exception e -> fail_message e loc;
+    | (cmd, loc)::q -> (try interpret_command env cmd
+    with Interpretation_exception e -> fail_message e loc);
     interpret_block env q
 
 (*
@@ -175,7 +170,10 @@ and interpret_block env blk =
 let interpret_var_decl env (var,init) =
     match init with
     | None   -> Hashtbl.replace env.var var.s_var_uniqueId (None, var.s_var_name)
-    | Some e -> Hashtbl.replace env.var var.s_var_uniqueId (Some (interpret_expr env e), var.s_var_name)
+    | Some e -> match interpret_expr env e with
+        | Sc_int i when var.s_var_type = St_int  -> Hashtbl.replace env.var var.s_var_uniqueId (Some (Sc_int i), var.s_var_name)
+        | Sc_bool b when var.s_var_type = St_bool -> Hashtbl.replace env.var var.s_var_uniqueId (Some (Sc_bool b), var.s_var_name)
+        | _ -> raise (Interpretation_exception (Printf.sprintf "Invalid init type : variable %s incompatible with expression type" var.s_var_name))
 
 (*
  * List and store functions
