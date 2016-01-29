@@ -3,7 +3,7 @@ class A {
   static boolean b;
 
   static void f() {
-    int x=3;
+    x=3;
     b = x < y;
     return;
   }
