@@ -13,13 +13,17 @@ let print_file file =
 let main () =
     (* Parsing arguments *)
     let f_name = ref ""
-    and displayCode = ref false
+    and print = ref false
     and interpret = ref false
-    and verify  = ref false in
+    and verify  = ref false
+    and vinit = ref false
+    and vtype = ref false in
     Arg.parse [
-        ("--display", Arg.Set(displayCode), "Display program source");
+        ("--print", Arg.Set(print), "Display program source");
         ("--interpret", Arg.Set(interpret), "Interpret program source");
-        ("--verify", Arg.Set(verify), "Verify program source")
+        ("--verify", Arg.Set(verify), "Verify program source");
+        ("--vinit", Arg.Set(vinit), "Verify variables are initialized");
+        ("--vtype", Arg.Set(vtype), "Verify program typing")
     ]
     (fun s -> f_name := s) "Mini-Java analyzer";
 
@@ -29,7 +33,7 @@ let main () =
     let f_desc = open_in !f_name in
 
     (* Print program code if asked *)
-    if !displayCode then print_file f_desc;
+    (*if !displayCode then print_file f_desc;*)
 
     (* Parse and build an AST *)
     Localizing.current_file_name := !f_name;
@@ -43,8 +47,15 @@ let main () =
     in
     let s_prog = Simple_java_translate.tr_java_prog java_prog in
 
+    (* Print program code if asked *)
+    if !print then Printer.print_program s_prog;
+
     (* interpret program if asked *)
     if !interpret then Interpreter.interpret_program s_prog;
+
+    if !vinit then V_init.verify_program s_prog;
+
+    if !vtype then V_type.verify_program s_prog;
 
     (* verify program if asked *)
     if !verify then Verifiyer.verify_program s_prog;
