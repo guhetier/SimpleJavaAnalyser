@@ -98,12 +98,12 @@ let rec print_condition cond blk1 blk2 =
 and print_loop cond blk = 
     print_newline ();
     print_indent ();
-    Printf.printf "while(%s){\n" (print_expr cond);
+    Printf.printf "while(%s){" (print_expr cond);
     inc_indent();
     print_block blk;
     dec_indent();
     print_indent ();
-    Printf.printf "}\n\n"
+    Printf.printf "}\n"
 
 (*
  * Interpret procedure call

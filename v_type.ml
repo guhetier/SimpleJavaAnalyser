@@ -24,7 +24,7 @@ type env = {
 exception Type_exception of string
 
 let fail_message (err : string) (loc : Localizing.extent) =
-    Printf.printf "Interpretation failed on %s.  ---  Error : %s\n"
+    Printf.printf "Type error found at %s.\n -->  Error : %s\n"
     (Localizing.extent_to_string loc) err
 
 (*
@@ -49,12 +49,12 @@ let verify_var env ext var =
  *)
 let rec verify_unary env ext op e = 
     match op with
-    | Su_neg -> if  verify_expr env e <> St_bool then
+    | Su_neg -> if verify_expr env e <> St_bool then
         fail_message "Invalid type : St_bool expected" ext;
         St_bool
         
 (*
- * Interpret binary operators TODO : reorganize operators
+ * Interpret binary operators
  *)
     and verify_binary env ext op a b =
     let compute_op op va vb =
@@ -79,10 +79,10 @@ let rec verify_unary env ext op e =
  *)
     and verify_expr env (expr, ext) = 
         match expr with
-        | Se_const e           -> (match e with
-            | Sc_bool _ -> St_bool
-            | Sc_int _  -> St_int
-            )
+        | Se_const e            ->(match e with
+                                   | Sc_bool _ -> St_bool
+                                   | Sc_int _  -> St_int
+                                   )
         | Se_random (a,b)      -> St_int
         | Se_var var           -> verify_var env ext var
         | Se_unary (op, e)     -> verify_unary env ext op e
@@ -108,9 +108,9 @@ let rec verify_condition env cond blk1 blk2 =
  * Interpret loops
  *)
 and verify_loop env cond blk = 
-    match verify_expr env cond with
-    | St_bool -> verify_block env blk;
-    | _       -> fail_message "Invalid type : St_bool expected" (snd cond)
+    if verify_expr env cond <> St_bool then
+        fail_message "Invalid type : St_bool expected" (snd cond);
+    verify_block env blk
 
 (*
  * Interpret procedure call
@@ -155,7 +155,9 @@ let verify_var_decl env (var,init) =
     match init with
         | None   -> ()
         | Some e -> if verify_expr env e <> var.s_var_type then
-                        fail_message (Printf.sprintf "Invalid init type : variable %s incompatible with expression type" var.s_var_name) var.s_var_extent
+                        fail_message (Printf.sprintf "Invalid type : variable %s expect a value of type %s" var.s_var_name
+                (match var.s_var_type with | St_int -> "int" | St_bool -> "bool" | _ -> ""))
+                var.s_var_extent
                         
 (*
  * List and store functions
@@ -194,16 +196,15 @@ let verify_program (p:s_program) : unit =
         | h::q -> verify_class env h; readDeclarations q
 in readDeclarations p;
 
-    (* print variables at the begining of the exection *)
-    print_endline "\nVariables :\n-----------";
-    print_variables env;
-    print_endline "------------\n";
-
     (* Look for function main and run it *)
     try
         Hashtbl.iter (fun (c, f) body -> if f = "main" then raise (Found body)) env.proc
     with Found body -> verify_block env body;
 
+    (* print variables at the end of the execution *)
+    print_endline "\nVariables :\n-----------";
+    print_variables env;
+    print_endline "------------\n";
 
 
 

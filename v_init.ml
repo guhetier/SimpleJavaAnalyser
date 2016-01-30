@@ -73,8 +73,9 @@ let verify_var env var =
     let _, isInit =  (try Hashtbl.find env.var var.s_var_uniqueId
     with Not_found -> raise (Init_exception (Printf.sprintf "Undeclared variable %s" var.s_var_name)))
     in (match isInit with
-    | Sure -> ()
-    | _      -> raise (Init_exception (Printf.sprintf "Variable %s may be not initialized" var.s_var_name))
+    | Sure  -> ()
+    | Maybe -> raise (Init_exception (Printf.sprintf "Variable %s may be not initialized" var.s_var_name))
+    | Not   -> raise(Init_exception (Printf.sprintf "Variable %s is not initialized" var.s_var_name))
     )
 
 (*
