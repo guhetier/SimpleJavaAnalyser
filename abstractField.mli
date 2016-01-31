@@ -12,10 +12,16 @@ module type AbstractField = sig
     (* Return the smallest abstract element greater than both parameters *)
     val combine : t -> t -> t
     (* Convert a concrete value to an abstract one *)
-    val convert : Simple_java_syntax.s_constant -> t
+    val convertVal : Simple_java_syntax.s_constant -> t
+    val convertInterval : int64 ->  int64 -> t
+    val isVal : int64 -> t -> bool
+    val isValIn : int64 -> t -> bool
+    val isValOut : int64 -> t -> bool
 
     val getVar : field -> Simple_java_syntax.s_var -> t
     val setVar  : field -> Simple_java_syntax.s_var -> t -> unit
+    val makeField : unit -> field
+    val addNonInitVar : field -> Simple_java_syntax.s_var -> unit
     val combineVar : field -> Simple_java_syntax.s_var -> t -> bool
 
     val toString : t -> string
