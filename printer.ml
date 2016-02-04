@@ -83,7 +83,7 @@ let rec print_condition cond blk1 blk2 =
     if(blk2 <> []) then
     begin
         print_indent ();
-        Printf.printf "{\n";
+        Printf.printf "else {\n";
         inc_indent();
         print_block blk2;
         dec_indent();
