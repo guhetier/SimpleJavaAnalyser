@@ -16,6 +16,9 @@ let dec_indent () =
 let print_indent () =
     print_string (String.make !indent ' ')
 
+let print_info info loc =
+    try Printf.printf "// %s\n" (Hashtbl.find info loc) with Not_found -> ()
+
 (*
  * Interpret variable access
  *)
@@ -46,16 +49,16 @@ let rec print_unary op e =
             vb
     in
     match op with
-        | Sb_or                  -> Printf.sprintf "%s || %s" (print_expr a) (print_expr b)
-        | _ -> compute_op op (print_expr a) (print_expr b)
+        | Sb_or -> Printf.sprintf "%s || %s" (print_expr a) (print_expr b)
+        | _     -> compute_op op (print_expr a) (print_expr b)
 
 (*
  * Interpret expressions
  *)
     and print_expr (expr, ext) = 
         match expr with
-        | Se_const (Sc_int e)           -> Printf.sprintf "%s" (Int64.to_string e)
-        | Se_const (Sc_bool e)           -> Printf.sprintf "%s" (if e then "True" else "False")
+        | Se_const (Sc_int e)  -> Printf.sprintf "%s" (Int64.to_string e)
+        | Se_const (Sc_bool e) -> Printf.sprintf "%s" (if e then "True" else "False")
         | Se_random (a,b)      -> Printf.sprintf "Support.random(%s,%s)" (Int64.to_string a) (Int64.to_string b) 
         | Se_var var           -> print_var var
         | Se_unary (op, e)     -> print_unary op e
@@ -71,12 +74,12 @@ let print_assign var expr =
 (* 
  * Interpret conditions
  *)
-let rec print_condition cond blk1 blk2 =
+let rec print_condition info cond blk1 blk2 =
     print_newline ();
     print_indent ();
     Printf.printf "if(%s){\n" (print_expr cond);
     inc_indent();
-    print_block blk1;
+    print_block info blk1;
     dec_indent();
     print_indent ();
     Printf.printf "}\n";
@@ -85,7 +88,7 @@ let rec print_condition cond blk1 blk2 =
         print_indent ();
         Printf.printf "else {\n";
         inc_indent();
-        print_block blk2;
+        print_block info blk2;
         dec_indent();
         print_indent ();
         Printf.printf "}\n"
@@ -95,12 +98,12 @@ let rec print_condition cond blk1 blk2 =
 (*
  * Interpret loops
  *)
-and print_loop cond blk = 
+and print_loop info cond blk = 
     print_newline ();
     print_indent ();
-    Printf.printf "while(%s){" (print_expr cond);
+    Printf.printf "while(%s){\n" (print_expr cond);
     inc_indent();
-    print_block blk;
+    print_block info blk;
     dec_indent();
     print_indent ();
     Printf.printf "}\n"
@@ -122,26 +125,27 @@ and print_assert expr =
 (*
  * Interpret instructions
  *)
-and print_command cmd =
-    match cmd with
+and print_command info (cmd, loc) =
+    (match cmd with
     | Sc_assign (var, expr)    -> print_assign var expr
-    | Sc_if (cond, blk1, blk2) -> print_condition cond blk1 blk2
-    | Sc_while (cond, blk)     -> print_loop cond blk
+    | Sc_if (cond, blk1, blk2) -> print_condition info cond blk1 blk2
+    | Sc_while (cond, blk)     -> print_loop info cond blk
     | Sc_proc_call proc        -> print_proc proc
-    | Sc_assert expr           -> print_assert expr
+    | Sc_assert expr           -> print_assert expr);
+    print_info info loc
 
 (*
  * Interpret block of instructions
  *)
-and print_block blk =
+and print_block info blk =
     match blk with
     | []            -> ()
-    | (cmd, loc)::q -> print_command cmd; print_block q
+    | cmd::q -> print_command info cmd; print_block info q
 
 (*
  * List and initialize variable declaration
  *)
-let print_var_decl (var,init) =
+let print_var_decl info (var,init) =
     print_indent ();
     Printf.printf "%s %s%s;\n"
     (match var.s_var_type with
@@ -151,17 +155,18 @@ let print_var_decl (var,init) =
     var.s_var_name
     (match init with
     | None -> ""
-    | Some e -> Printf.sprintf " = %s"(print_expr e))
+    | Some e -> Printf.sprintf " = %s" (print_expr e));
+    print_info info var.s_var_extent
 
 (*
  * List and store functions
  *)
-let print_proc_decl className p = 
+let print_proc_decl info className p = 
     print_newline();
     print_indent ();
     Printf.printf "void %s () {\n" p.s_proc_name;
     inc_indent();
-    print_block p.s_proc_body;
+    print_block info p.s_proc_body;
     dec_indent();
     print_indent ();
     Printf.printf "}\n\n"
@@ -169,12 +174,12 @@ let print_proc_decl className p =
 (*
  * Interpret class definitions
  *)
-let print_class c = 
+let print_class info c = 
     let rec readClassDeclaration l = match l with
     | []    -> ()
     | h::q  -> (match h with
-        | Sd_var v      -> print_var_decl v
-        | Sd_function p -> print_proc_decl c.s_class_name p
+        | Sd_var v      -> print_var_decl info v
+        | Sd_function p -> print_proc_decl info c.s_class_name p
     );
     readClassDeclaration q
     in
@@ -192,15 +197,16 @@ exception Found of s_block
 (*
  * Interpret a program
  *)
-let print_program (p:s_program) : unit =
+
+let print_program_with_prop (p:s_program) info : unit =
     (* Read all declration in the program *)
     let rec readDeclarations l = match l with
     | []   -> ()
-    | h::q -> print_class h; readDeclarations q
+    | h::q -> print_class info h; readDeclarations q
     in readDeclarations p
-
     
-
+let print_program (p:s_program) : unit =
+    print_program_with_prop p (Hashtbl.create 1)
 
 
 
