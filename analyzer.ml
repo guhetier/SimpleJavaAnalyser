@@ -1,14 +1,6 @@
 open Simple_java_syntax
 
-(* Pretty print a program file *)
-let print_file file = 
-    let nline = ref 1 in
-    try
-        while true do
-            Printf.printf "%i | %s\n" (!nline) (input_line file);
-            nline := !nline + 1
-        done
-    with End_of_file -> seek_in file 0
+module VConstant = AbstractInterpret.Make(Constant.Constant)
 
 let main () =
     (* Parsing arguments *)
@@ -17,13 +9,15 @@ let main () =
     and interpret = ref false
     and verify  = ref false
     and vinit = ref false
-    and vtype = ref false in
+    and vtype = ref false
+    and constant = ref false in
     Arg.parse [
         ("--print", Arg.Set(print), "Display program source");
         ("--interpret", Arg.Set(interpret), "Interpret program source");
         ("--verify", Arg.Set(verify), "Verify program source");
         ("--vinit", Arg.Set(vinit), "Verify variables are initialized");
-        ("--vtype", Arg.Set(vtype), "Verify program typing")
+        ("--vtype", Arg.Set(vtype), "Verify program typing");
+        ("--constant",  Arg.Set(constant), "")
     ]
     (fun s -> f_name := s) "Mini-Java analyzer";
 
@@ -59,6 +53,8 @@ let main () =
 
     (* verify program if asked *)
     if !verify then Verifiyer.verify_program s_prog;
+
+    if !constant then VConstant.interpret_program s_prog;
 
   Printf.printf "finished...\n"
 
