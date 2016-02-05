@@ -1,72 +1,77 @@
-open Simple_java_syntax
 open AbstractField
 
 module Constant : AbstractField = struct
 
-    type t = Const of int64 | Top | Bottom
-    type field = (Simple_java_syntax.s_var, t) Hashtbl.t
+    type t = Const of int64 | Top | Undef | Unreach
     
-    let bottom = Bottom
+    let undef = Undef
+    let unreach = Unreach
 
-    let makeField () =
-        Hashtbl.create 10
+    let merge a b =
+        match a, b with
+        | Undef, _
+        | _, Undef                        -> Undef
+        | Unreach, x
+        | x, Unreach                      -> x
+        | Const aa, Const bb when aa = bb -> a
+        | _                               -> Top
 
-    let addNonInitVar field var =
-        Hashtbl.replace field var Bottom
+    let intersect = merge
 
-    let setVar field var v =
-        Hashtbl.replace field  var v
-
-    let getVar field var =
-        try Hashtbl.find field var
-        with Not_found -> Bottom
-
+    let equal a b =
+        match a,b with
+        | Top, Top
+        | Undef, Undef
+        | Unreach, Unreach -> true
+        | Const(a), Const(b) when a = b -> true
+        | _ -> false
+        
     let convertVal c =
         match c with
-        | Sc_int i         -> Const i
-        | Sc_bool b when b -> Const 1L
-        | Sc_bool _        -> Const 0L
+        | Simple_java_syntax.Sc_int i         -> Const i
+        | Simple_java_syntax.Sc_bool b when b -> Const 1L
+        | Simple_java_syntax.Sc_bool _        -> Const 0L
 
     let convertInterval binf bsup =
         Top
 
-    let combine a b =
-        match a, b with
-        | Bottom, x
-        | x, Bottom                       -> x
-        | Const aa, Const bb when aa = bb -> a
-        | _                               -> Top
+    let isVal i v =
+        match v with
+        | Const v when v = i -> true
+        | _ -> false
 
-    let combineVar field var b =
-        let oldval = getVar field var in
-        let newval = combine oldval b in
-        if oldval = newval then false
-        else
-        begin
-            Hashtbl.replace field var (combine (getVar field var) b);
-            true
-        end
+    let isValIn i v =
+        match v with
+        | Top -> true
+        | Const v when v = i -> true
+        | _ -> false
 
-    let copy field =
-        Hashtbl.copy field
+    let isValOut i v =
+        match v with
+        | Top -> false
+        | Const v when v = i -> false
+        | _ -> true
 
     let toString v =
         match v with
         | Top     -> "Top"
-        | Bottom  -> "Bottom"
+        | Undef   -> "Non defined"
+        | Unreach -> "Non reachable"
         | Const a -> Printf.sprintf "Const(%s)" (Int64.to_string a)
 
     let applyUnOp op a =
         match a with
         | Top     -> Top
-        | Bottom  -> Bottom
+        | Undef   -> Undef
+        | Unreach -> Unreach
         | Const a -> Const(op a)
 
     let applyBinOp op a b =
         match a, b with
-        | Top, _ | _, Top       -> Top
-        | Bottom, _ | _, Bottom -> Bottom
-        | Const a, Const b      -> Const(op a b)
+        | Undef, _ | _, Undef     -> Undef
+        | Top, _ | _, Top         -> Top
+        | Unreach, _ | _, Unreach -> Unreach
+        | Const a, Const b        -> Const(op a b)
 
     let binOp op a b =
         match op with
@@ -80,6 +85,5 @@ module Constant : AbstractField = struct
     let unOp op a =
         match op with
         | Simple_java_syntax.Su_neg -> applyUnOp (fun a -> if a = 0L then 1L else 0L) a
-
 
 end
