@@ -19,7 +19,7 @@ module Make (Field: AbstractField) : S = struct
 
 
     let stateToString  state =
-        let ss = Hashtbl.fold (fun var value l -> (Printf.sprintf "{%s : %s }" var.s_var_name (Field.toString value))::l) state [] in
+        let ss = Hashtbl.fold (fun var value l -> (Printf.sprintf "{ %s : %s }" var.s_var_name (Field.toString value))::l) state [] in
         String.concat ", " ss
 
     let printRecords env =
@@ -246,7 +246,8 @@ module Make (Field: AbstractField) : S = struct
         try
             Hashtbl.iter (fun f body -> if f.s_proc_call_name = "main" then raise (Found body)) env.proc
         with Found body -> let _ = interpret_block env body in
-        printRecords env
-
-
+        printRecords env;
+        let info = Hashtbl.create 10 in
+        Hashtbl.iter (fun loc state -> Hashtbl.replace info loc (stateToString state)) env.records;
+        Printer.print_program_with_prop p info
 end

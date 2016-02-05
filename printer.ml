@@ -17,7 +17,7 @@ let print_indent () =
     print_string (String.make !indent ' ')
 
 let print_info info loc =
-    try Printf.printf "// %s\n" (Hashtbl.find info loc) with Not_found -> ()
+    try print_indent (); Printf.printf "// %s\n" (Hashtbl.find info loc) with Not_found -> ()
 
 (*
  * Interpret variable access
