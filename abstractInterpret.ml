@@ -203,9 +203,10 @@ module Make (Field: AbstractField) : S = struct
      * List and initialize variable declaration
      *)
     let interpret_var_decl env (var,init) =
-        match init with
+        (match init with
         | None   -> Hashtbl.replace env.vars var Field.undef
-        | Some e -> Hashtbl.replace env.vars var (interpret_expr env e)
+        | Some e -> Hashtbl.replace env.vars var (interpret_expr env e));
+        mergeState env var.s_var_extent env.vars
 
     (*
      * List and store functions
@@ -240,8 +241,6 @@ module Make (Field: AbstractField) : S = struct
         (* Read declarations *)
         List.iter (interpret_class env) p;
 
-        (* Record initial state *)
-        mergeState env (Localizing.extent_unknown()) env.vars; 
 
         (* Look for main function *)
         try
