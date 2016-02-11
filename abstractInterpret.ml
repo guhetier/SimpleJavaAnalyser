@@ -246,7 +246,6 @@ module Make (Field: AbstractField) : S = struct
         try
             Hashtbl.iter (fun f body -> if f.s_proc_call_name = "main" then raise (Found body)) env.proc
         with Found body -> let _ = interpret_block env body in
-        printRecords env;
         let info = Hashtbl.create 10 in
         Hashtbl.iter (fun loc state -> Hashtbl.replace info loc (stateToString state)) env.records;
         Printer.print_program_with_prop p info
