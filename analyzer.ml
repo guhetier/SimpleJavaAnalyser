@@ -59,8 +59,6 @@ let main () =
 
     if !constant then VConstant.interpret_program s_prog;
 
-    if !interval then VInterval.interpret_program s_prog;
-
-  Printf.printf "finished...\n"
+    if !interval then VInterval.interpret_program s_prog
 
   let _ = main ()

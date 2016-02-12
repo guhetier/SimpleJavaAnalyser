@@ -1,11 +1,6 @@
 open AbstractField
 
-module type S =
-    sig
-        val interpret_program : Simple_java_syntax.s_program -> unit
-    end
-
-module Make (Field: AbstractField) : S = struct
+module Make (Field: AbstractField) = struct
 
     open Simple_java_syntax
 
@@ -139,7 +134,9 @@ module Make (Field: AbstractField) : S = struct
         let rec iterLoop env2 = 
             (* TODO : si le block ne fini pas... *)
             (* - tester la condition *)
-            interpret_block env2 blk;
+            if not (interpret_block env2 blk) then
+                false
+            else
             let v = interpret_expr env2 cond in
              (* On quitte parce que état stable atteint
               * état sortant = état fusion *)
@@ -155,7 +152,7 @@ module Make (Field: AbstractField) : S = struct
                 end
                 else
                 begin
-                    mergeBlk env2 env;
+                    let _ = mergeBlk env2 env in
                     mergeState env ext lastVars;
                     true
                 end
@@ -201,13 +198,16 @@ module Make (Field: AbstractField) : S = struct
                 }
             in
             (* Else, try to execute 10 times the block : it may be enough *)
-            let i = ref 0 in
+            let i = ref 0 and term = ref true in
             while !i < 10 do
-                interpret_block env2 blk;
-                let v = interpret_expr env2 cond in
-                i := !i + 1;
-                if Field.isVal 0L v then
-                    i := 20
+                if not (interpret_block env2 blk) then
+                    term := false
+                else(
+                    let v = interpret_expr env2 cond in
+                    i := !i + 1;
+                    if Field.isVal 0L v then
+                        i := 20
+                )
             done;
             (* If we don't go out of the loop in the first iterations*)
             if !i <> 20 then
