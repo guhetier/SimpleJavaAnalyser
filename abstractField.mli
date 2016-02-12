@@ -7,13 +7,13 @@ module type AbstractField = sig
     (* Return the smallest abstract element greater than both parameters *)
     val merge : t -> t -> t
     val intersect : t -> t -> t
+    val enlarge : t -> t
 
     (* Convert a concrete value to an abstract one *)
     val convertVal : Simple_java_syntax.s_constant -> t
     val convertInterval : int64 ->  int64 -> t
     val isVal : int64 -> t -> bool
     val isValIn : int64 -> t -> bool
-    val isValOut : int64 -> t -> bool
     val equal : t -> t -> bool
 
     val toString : t -> string

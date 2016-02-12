@@ -130,7 +130,9 @@ module Make (Field: AbstractField) : S = struct
             interpret_block env2 blk; (* TODO : si le block ne fini pas... *)
             (* - tester la condition *)
             let v = interpret_expr env2 cond in
-            if(not (mergeBlk env env2) || Field.isVal 0L v) then
+             (* On quitte parce que état statble atteint
+              * état sortant = état fusion *)
+            if not (mergeBlk env env2) then
                 let lastVars = getLastVars env blk in
                 let extEnv = {vars=lastVars; records=env.records; proc=env.proc} in
                 let vext = interpret_expr extEnv cond in
@@ -146,7 +148,15 @@ module Make (Field: AbstractField) : S = struct
                     true
                 end
             else
-                iterLoop env2
+                (* On sort de la boucle en ne vérifiant plus la condition.
+                 * On est donc dans l'état courant après la boucle *)
+                (if Field.isVal 0L v then
+                    begin
+                        mergeState env ext env2.vars;
+                        true
+                    end
+                else
+                    iterLoop env2)
         in
 
         let v = interpret_expr env cond in
