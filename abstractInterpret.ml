@@ -135,9 +135,11 @@ module Make (Field: AbstractField) : S = struct
         mergeState env ext env.vars; !res
 
     and interpret_loop env ext cond blk =
+
         let rec iterLoop env2 = 
-            interpret_block env2 blk; (* TODO : si le block ne fini pas... *)
+            (* TODO : si le block ne fini pas... *)
             (* - tester la condition *)
+            interpret_block env2 blk;
             let v = interpret_expr env2 cond in
              (* On quitte parce que état stable atteint
               * état sortant = état fusion *)
@@ -168,6 +170,7 @@ module Make (Field: AbstractField) : S = struct
                     end
                 else
                     begin
+                        (* elargir les variables qui ont changés *)
                         enlarge_env env2 l;
                         iterLoop env2
                     end)
@@ -182,6 +185,7 @@ module Make (Field: AbstractField) : S = struct
         in
 
         let v = interpret_expr env cond in
+        (* If we never enter the loop *)
         if (Field.isVal 0L v) then
             begin
             set_block_unreachable env blk;
@@ -189,19 +193,33 @@ module Make (Field: AbstractField) : S = struct
             true
             end
         else
-            
-            (* - tester le bloc *)
+            begin
             let env2 = {
                 proc = env.proc;
                 vars = Hashtbl.copy env.vars;
                 records = Hashtbl.create 10
                 }
             in
-            iterLoop env2
-            (* - si encore possiblement vrai, tester le bloc a nouveau et merger les deux passages *)
-            (* - elargir les variables qui ont changés *)
-            (* - tant que le test peut être vrai et que des variables changent *)
-            (* - la val du while est le merge de tout les états en tête de boucle *)
+            (* Else, try to execute 10 times the block : it may be enough *)
+            let i = ref 0 in
+            while !i < 10 do
+                interpret_block env2 blk;
+                let v = interpret_expr env2 cond in
+                i := !i + 1;
+                if Field.isVal 0L v then
+                    i := 20
+            done;
+            (* If we don't go out of the loop in the first iterations*)
+            if !i <> 20 then
+                (* Then, try to operate by enlargement *)
+                iterLoop env2
+            else
+                begin
+                (* We go out of the loop : merge env and quit*)
+                    mergeState env ext env2.vars;
+                    true
+                end
+            end
 
     and interpret_proc env ext proc =
         let res = (try interpret_block env (Hashtbl.find env.proc proc)

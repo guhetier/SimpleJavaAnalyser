@@ -23,6 +23,7 @@ module Constant : AbstractField = struct
         | Const _ -> Top
         | _ -> a
 
+
     let equal a b =
         match a,b with
         | Top, Top
