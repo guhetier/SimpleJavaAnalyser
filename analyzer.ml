@@ -1,6 +1,7 @@
 open Simple_java_syntax
 
 module VConstant = AbstractInterpret.Make(Constant.Constant)
+module VInterval = AbstractInterpret.Make(Interval.Interval)
 
 let main () =
     (* Parsing arguments *)
@@ -10,6 +11,7 @@ let main () =
     and verify  = ref false
     and vinit = ref false
     and vtype = ref false
+    and interval = ref false
     and constant = ref false in
     Arg.parse [
         ("--print", Arg.Set(print), "Display program source");
@@ -17,7 +19,8 @@ let main () =
         ("--verify", Arg.Set(verify), "Verify program source");
         ("--vinit", Arg.Set(vinit), "Verify variables are initialized");
         ("--vtype", Arg.Set(vtype), "Verify program typing");
-        ("--constant",  Arg.Set(constant), "")
+        ("--interval", Arg.Set(interval), "Perform interval variable propagation");
+        ("--constant",  Arg.Set(constant), "Perform constant variable propagation")
     ]
     (fun s -> f_name := s) "Mini-Java analyzer";
 
@@ -55,6 +58,8 @@ let main () =
     if !verify then Verifiyer.verify_program s_prog;
 
     if !constant then VConstant.interpret_program s_prog;
+
+    if !interval then VInterval.interpret_program s_prog;
 
   Printf.printf "finished...\n"
 
