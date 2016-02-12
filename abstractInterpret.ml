@@ -32,20 +32,23 @@ module Make (Field: AbstractField) : S = struct
         let _, ext = List.hd(List.rev blk) in
         Hashtbl.find env.records ext
 
+    (* Merge two state and return a list of modifed variables,
+     * or None if an unreach line is reach*)
     let mergeStateChange env loc field = 
         if not (Hashtbl.mem env.records loc) then
-            (Hashtbl.replace env.records loc (Hashtbl.copy field); true)
+            (Hashtbl.replace env.records loc (Hashtbl.copy field); None)
         else begin
             let prev = Hashtbl.find env.records loc in
-            Hashtbl.fold (fun var vnew r ->
+            Some(Hashtbl.fold (fun var vnew r ->
                             let vold = Hashtbl.find prev var in
                             let vmerge = Field.merge vold vnew in
                             if (not (Field.equal vmerge vold)) then
-                                (Hashtbl.replace prev var vmerge; true)
+                                (Hashtbl.replace prev var vmerge; var::r)
                             else
                                 r)
                         field
-                        false
+                        []
+            )
         end
 
     let mergeState env loc field =
@@ -54,17 +57,23 @@ module Make (Field: AbstractField) : S = struct
     let mergeBlk env env2 =
         Hashtbl.fold
             (fun loc s2 r ->
-                (mergeStateChange env loc s2) || r
+                match mergeStateChange env loc s2, r with
+                | None, _
+                | _, None -> None
+                | Some l1, Some l2 -> Some(l1@l2)
             )
             env2.records
-            false
+            (Some [])
 
     let intersectState env env2 =
         Hashtbl.iter (fun var v2 ->
             let v1 = Hashtbl.find env.vars var in
             Hashtbl.replace env.vars var (Field.intersect v1 v2))
             env2.vars
-        
+    
+    let enlarge_env env l =
+        List.iter (fun v -> let x = try Hashtbl.find env.vars v with Not_found -> Field.unreach in
+                    Hashtbl.replace env.vars v (Field.enlarge x)) l
 
     let unreachableState env =
         let h = Hashtbl.create 10 in
@@ -130,9 +139,10 @@ module Make (Field: AbstractField) : S = struct
             interpret_block env2 blk; (* TODO : si le block ne fini pas... *)
             (* - tester la condition *)
             let v = interpret_expr env2 cond in
-             (* On quitte parce que état statble atteint
+             (* On quitte parce que état stable atteint
               * état sortant = état fusion *)
-            if not (mergeBlk env env2) then
+            match (mergeBlk env env2) with
+            | Some [] ->
                 let lastVars = getLastVars env blk in
                 let extEnv = {vars=lastVars; records=env.records; proc=env.proc} in
                 let vext = interpret_expr extEnv cond in
@@ -147,10 +157,22 @@ module Make (Field: AbstractField) : S = struct
                     mergeState env ext lastVars;
                     true
                 end
-            else
+            (* Des variables ont évoluées *)
+            | Some l ->
                 (* On sort de la boucle en ne vérifiant plus la condition.
                  * On est donc dans l'état courant après la boucle *)
                 (if Field.isVal 0L v then
+                    begin
+                        mergeState env ext env2.vars;
+                        true
+                    end
+                else
+                    begin
+                        enlarge_env env2 l;
+                        iterLoop env2
+                    end)
+            (* On découvre du nouveau code encore non atteint *)
+            | None -> (if Field.isVal 0L v then
                     begin
                         mergeState env ext env2.vars;
                         true

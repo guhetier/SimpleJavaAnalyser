@@ -18,6 +18,11 @@ module Constant : AbstractField = struct
 
     let intersect = merge
 
+    let enlarge a =
+        match a with
+        | Const _ -> Top
+        | _ -> a
+
     let equal a b =
         match a,b with
         | Top, Top
