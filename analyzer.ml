@@ -1,7 +1,10 @@
 open Simple_java_syntax
 
-module VConstant = AbstractInterpret.Make(Constant.Constant)
-module VInterval = AbstractInterpret.Make(Interval.Interval)
+module ConstantEnv = MapEnv.Make(Constant.Constant)
+module VConstant = AbstractInterpret.Make(ConstantEnv)
+
+module IntervalEnv = MapEnv.Make(Interval.Interval)
+module VInterval = AbstractInterpret.Make(IntervalEnv)
 
 let main () =
     (* Parsing arguments *)
