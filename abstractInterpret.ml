@@ -1,85 +1,63 @@
-open AbstractField
+open Environment
+open VarMap
 
-module Make (Field: AbstractField) = struct
+module Make (Env: Environment) = struct
 
     open Simple_java_syntax
 
-    type state = (Simple_java_syntax.s_var, Field.t) Hashtbl.t
-
-    type env = {
-        vars    : state; (* List of all variable of the program and their current value at the point of execution *)
-        proc    : (s_proc_call, s_block) Hashtbl.t; (* List of all procs of the program and their instructions *)
-        records : (Localizing.extent, state) Hashtbl.t (* Possible values of all variable at a point af the program, with every access path *)
-    }
-
-
-    let stateToString  state =
-        let ss = Hashtbl.fold (fun var value l -> (Printf.sprintf "{ %s : %s }" var.s_var_name (Field.toString value))::l) state [] in
-        String.concat ", " ss
-
-    let printRecords env =
-        Hashtbl.iter (fun ext state -> Printf.printf "%s \n---\n %s \n---\n"
-                                        (Localizing.extent_to_string ext)
-                                        (stateToString state)) env.records
-        
-
-    let getLastVars env blk =
-        let _, ext = List.hd(List.rev blk) in
-        Hashtbl.find env.records ext
+    module Field = Env.Field
+    type state = Env.state
 
     (* Merge two state and return a list of modifed variables,
      * or None if an unreach line is reach*)
-    let mergeStateChange env loc field = 
-        if not (Hashtbl.mem env.records loc) then
-            (Hashtbl.replace env.records loc (Hashtbl.copy field); None)
-        else begin
-            let prev = Hashtbl.find env.records loc in
-            Some(Hashtbl.fold (fun var vnew r ->
-                            let vold = Hashtbl.find prev var in
-                            let vmerge = Field.merge vold vnew in
-                            if (not (Field.equal vmerge vold)) then
-                                (Hashtbl.replace prev var vmerge; var::r)
-                            else
-                                r)
-                        field
-                        []
-            )
-        end
+    (* TODO : See Map.merge !!!! *)
+    (*let mergeStateChange env loc field = *)
+        (*if not (Hashtbl.mem env.records loc) then*)
+            (*(Hashtbl.replace env.records loc field; None)*)
+        (*else begin*)
+            (*let prev = Hashtbl.find env.records loc in*)
+            (*Some(VarMap.fold (fun var vnew r ->*)
+                            (*let vold = VarMap.find var prev in*)
+                            (*let vmerge = Field.merge vold vnew in*)
+                            (*if (not (Field.equal vmerge vold)) then*)
+                                (*(Hashtbl.replace env.records loc (VarMap.add var vmerge prev); var::r)*)
+                            (*else*)
+                                (*r)*)
+                        (*field*)
+                        (*[]*)
+            (*)*)
+        (*end*)
 
-    let mergeState env loc field =
-        let _ = mergeStateChange env loc field in ()
+    (*let mergeState env loc field =*)
+        (*let _ = mergeStateChange env loc field in ()*)
 
-    let mergeBlk env env2 =
-        Hashtbl.fold
-            (fun loc s2 r ->
-                match mergeStateChange env loc s2, r with
-                | None, _
-                | _, None -> None
-                | Some l1, Some l2 -> Some(l1@l2)
-            )
-            env2.records
-            (Some [])
+    (*let mergeBlk env env2 =*)
+        (*Hashtbl.fold*)
+            (*(fun loc s2 r ->*)
+                (*match mergeStateChange env loc s2, r with*)
+                (*| None, _*)
+                (*| _, None -> None*)
+                (*| Some l1, Some l2 -> Some(l1@l2)*)
+            (*)*)
+            (*env2.records*)
+            (*(Some [])*)
 
-    let intersectState env env2 =
-        Hashtbl.iter (fun var v2 ->
-            let v1 = Hashtbl.find env.vars var in
-            Hashtbl.replace env.vars var (Field.intersect v1 v2))
-            env2.vars
+    (*let intersectState env env2 : Env.t =*)
+        (*VarMap.iter (fun var v2 ->*)
+            (*let v1 = VarMap.find var env.vars in*)
+            (*Hashtbl.replace env.vars var (Field.intersect v1 v2))*)
+            (*env2.vars*)
     
-    let enlarge_env env l =
-        List.iter (fun v -> let x = try Hashtbl.find env.vars v with Not_found -> Field.unreach in
-                    Hashtbl.replace env.vars v (Field.enlarge x)) l
-
-    let unreachableState env =
-        let h = Hashtbl.create 10 in
-        Hashtbl.iter (fun var _ -> Hashtbl.replace h var Field.unreach) env.vars;
-        h
+    (*let enlarge_env env l =*)
+        (*List.iter (fun v -> let x = try Hashtbl.find env.vars v with Not_found -> Field.unreach in*)
+                    (*Hashtbl.replace env.vars v (Field.enlarge x)) l*)
 
     let set_block_unreachable env blk =
-        List.iter (fun (_, ext) -> mergeState env ext (unreachableState env); ()) blk
+        List.fold_left (fun env (_, ext) -> Env.mergeState env (Env.unreachable env)) env blk
 
     let interpret_var env var =
-        try Hashtbl.find env.vars var with Not_found -> Field.undef
+        Env.getValue env var
+        (*try Hashtbl.find env.vars var with Not_found -> Field.undef*)
 
     let rec interpret_unary env op e =
         Field.unOp op (interpret_expr env e)
@@ -91,94 +69,74 @@ module Make (Field: AbstractField) = struct
         match expr with
         | Se_const c -> Field.convertVal c
         | Se_random (a,b) -> Field.convertInterval a b
-        | Se_var var -> interpret_var env var
+        | Se_var var -> Env.getValue env var
         | Se_unary (op, e) -> interpret_unary env op e
         | Se_binary (op, a, b) -> interpret_binary env op a b
 
     let interpret_assign env ext var expr =
-        Hashtbl.replace env.vars var (interpret_expr env expr);
-        mergeState env ext env.vars
+        let env = Env.recordState env ext in 
+        Env.setValue env var (interpret_expr env expr)
 
-    let rec interpret_condition env ext cond blk1 blk2 =
+    let rec interpret_condition env procs ext cond blk1 blk2 =
+        let env = Env.recordState env ext in
         let v = interpret_expr env cond in
         let isTrue = Field.isValIn 1L v and isFalse = Field.isValIn 0L v in
-        let res = ref true in
 
         if isTrue && isFalse then
             begin
-                let env2 = {
-                    vars = Hashtbl.copy env.vars;
-                    proc = env.proc;
-                    records = env.records
-                } in
-                res := (interpret_block env blk1);
-                res := (interpret_block env2 blk2) || (!res);
+                let env1 = interpret_block env procs blk1
+                and env2 = interpret_block env procs blk2 in
 
                 (* Actualise outgoing env according to both branch *)
-                intersectState env env2;
+                Env.mergeState env1 env2;
             end
         else if isTrue && not isFalse then
             begin
-                set_block_unreachable env blk2;
-                res := (interpret_block env blk1)
+                let env = set_block_unreachable env blk2 in
+                interpret_block env procs blk1
             end
         else (* isFalse && not isTrue*)
             begin
-                set_block_unreachable env blk1;
-                res := (interpret_block env blk2)
+                let env = set_block_unreachable env blk2 in
+                interpret_block env procs blk2
             end;
-        mergeState env ext env.vars; !res
 
-    and interpret_loop env ext cond blk =
+    and interpret_loop env procs ext cond blk =
+        let env = Env.recordState env ext in
 
-        let rec iterLoop env2 = 
+        let rec iterLoop env = 
             (* TODO : si le block ne fini pas... *)
             (* - tester la condition *)
-            if not (interpret_block env2 blk) then
-                false
+            let nextEnv = interpret_block env procs blk in
+            if Env.isUnreachable nextEnv then
+                nextEnv
             else
-            let v = interpret_expr env2 cond in
-             (* On quitte parce que état stable atteint
-              * état sortant = état fusion *)
-            match (mergeBlk env env2) with
+            let v = interpret_expr env cond in
+            match (Env.varToReduce env nextEnv) with
+            (* On a atteint un état stable*)
             | Some [] ->
-                let lastVars = getLastVars env blk in
-                let extEnv = {vars=lastVars; records=env.records; proc=env.proc} in
-                let vext = interpret_expr extEnv cond in
+                let vext = interpret_expr nextEnv cond in
+                (* On boucle de manière certaine *)
                 if(Field.isVal 1L vext) then
-                begin
-                    mergeState env ext (unreachableState env);
-                    false
-                end
+                    Env.unreachable nextEnv
                 else
-                begin
-                    let _ = mergeBlk env2 env in
-                    mergeState env ext lastVars;
-                    true
-                end
+                    nextEnv
             (* Des variables ont évoluées *)
             | Some l ->
                 (* On sort de la boucle en ne vérifiant plus la condition.
                  * On est donc dans l'état courant après la boucle *)
                 (if Field.isVal 0L v then
-                    begin
-                        mergeState env ext env2.vars;
-                        true
-                    end
+                        nextEnv
                 else
-                    begin
-                        (* elargir les variables qui ont changés *)
-                        enlarge_env env2 l;
-                        iterLoop env2
-                    end)
+                    (* elargir les variables qui ont changés *)
+                    let env = Env.enlarge nextEnv l in
+                    iterLoop env
+                )
             (* On découvre du nouveau code encore non atteint *)
             | None -> (if Field.isVal 0L v then
-                    begin
-                        mergeState env ext env2.vars;
-                        true
-                    end
+                    nextEnv
                 else
-                    iterLoop env2)
+                    iterLoop nextEnv)
         in
 
         let v = interpret_expr env cond in
@@ -186,83 +144,75 @@ module Make (Field: AbstractField) = struct
         if (Field.isVal 0L v) then
             begin
             set_block_unreachable env blk;
-            mergeState env ext env.vars;
-            true
             end
         else
             begin
-            let env2 = {
-                proc = env.proc;
-                vars = Hashtbl.copy env.vars;
-                records = Hashtbl.create 10
-                }
-            in
             (* Else, try to execute 10 times the block : it may be enough *)
-            let i = ref 0 and term = ref true in
+            let i = ref 0 in
             while !i < 10 do
-                if not (interpret_block env2 blk) then
-                    term := false
+                let env = interpret_block env procs blk in
+                if Env.isUnreachable env then
+                    failwith "TODO : terminaison"
                 else(
-                    let v = interpret_expr env2 cond in
+                    let v = interpret_expr env cond in
                     i := !i + 1;
                     if Field.isVal 0L v then
-                        i := 20
+                        i := -1
                 )
             done;
             (* If we don't go out of the loop in the first iterations*)
-            if !i <> 20 then
+            if !i <> -1 then
                 (* Then, try to operate by enlargement *)
-                iterLoop env2
+                iterLoop env
             else
-                begin
                 (* We go out of the loop : merge env and quit*)
-                    mergeState env ext env2.vars;
-                    true
-                end
+                env
             end
 
-    and interpret_proc env ext proc =
-        let res = (try interpret_block env (Hashtbl.find env.proc proc)
-        with Not_found -> failwith (Printf.sprintf "%s -> Undefined procedure %s::%s" (Localizing.extent_to_string ext) proc.s_proc_call_class proc.s_proc_call_name)) in
-        mergeState env ext env.vars;
-        res
+    and interpret_proc env procs ext proc =
+        let env = Env.recordState env ext in
+        try interpret_block env procs (Hashtbl.find procs proc)
+        with Not_found -> failwith (Printf.sprintf "%s -> Undefined procedure %s::%s" (Localizing.extent_to_string ext) proc.s_proc_call_class proc.s_proc_call_name)
 
     and interpret_assert env ext expr =
+        let env = Env.recordState env ext in
         let v = interpret_expr env expr in
         if Field.isVal 0L v then
-            (mergeState env ext (unreachableState env); false)
+            Env.unreachable env
         else
-            (mergeState env ext env.vars; true)
+            env
 
-    and interpret_command env (cmd, ext) =
+    and interpret_command env procs (cmd, ext) =
         match cmd with
-        | Sc_assign (var, exp)     -> interpret_assign env ext var exp; true
-        | Sc_if (cond, blk1, blk2) -> interpret_condition env ext cond blk1 blk2
-        | Sc_while (cond, blk)     -> interpret_loop env ext cond blk
-        | Sc_proc_call proc        -> interpret_proc env ext proc
+        | Sc_assign (var, exp)     -> interpret_assign env ext var exp
+        | Sc_if (cond, blk1, blk2) -> interpret_condition env procs ext cond blk1 blk2
+        | Sc_while (cond, blk)     -> interpret_loop env procs ext cond blk
+        | Sc_proc_call proc        -> interpret_proc env procs ext proc
         | Sc_assert exp            -> interpret_assert env ext exp
 
-    and interpret_block env blk : bool =
+    and interpret_block env procs blk =
         match blk with
-        | [] -> true
-        | c::q -> if interpret_command env c then
-                        interpret_block env q
-                else (set_block_unreachable env q; false)
+        | [] -> env
+        | c::q -> let env = interpret_command env procs c in
+                    if not (Env.isUnreachable env) then
+                        interpret_block env procs q
+                    else 
+                        set_block_unreachable env q
 
     (*
      * List and initialize variable declaration
      *)
     let interpret_var_decl env (var,init) =
-        (match init with
-        | None   -> Hashtbl.replace env.vars var Field.undef
-        | Some e -> Hashtbl.replace env.vars var (interpret_expr env e));
-        mergeState env var.s_var_extent env.vars
+        let env = Env.recordState env var.s_var_extent in
+        match init with
+        | None   -> Env.setValue env var Field.undef
+        | Some e -> Env.setValue env var (interpret_expr env e)
 
     (*
      * List and store functions
      *)
-    let interpret_proc_decl env className p = 
-        Hashtbl.replace env.proc
+    let interpret_proc_decl proc className p = 
+        Hashtbl.replace proc
             {s_proc_call_class = className;
             s_proc_call_name = p.s_proc_name}
         p.s_proc_body
@@ -270,33 +220,28 @@ module Make (Field: AbstractField) = struct
     (*
      * Interpret class definitions
      *)
-    let interpret_class env c = 
-        let rec readClassDeclaration l =
+    let interpret_class env proc c = 
+        let rec readClassDeclaration env l =
             match l with
-            | []    -> ()
-            | (Sd_var v)::q  -> interpret_var_decl env v; readClassDeclaration q
-            | (Sd_function p)::q  -> interpret_proc_decl env c.s_class_name p;
-                                    readClassDeclaration q
-        in readClassDeclaration c.s_class_body
+            | []    -> env
+            | (Sd_var v)::q  -> let newEnv = interpret_var_decl env v in readClassDeclaration newEnv q
+            | (Sd_function p)::q  -> interpret_proc_decl proc c.s_class_name p;
+                                    readClassDeclaration env q
+        in readClassDeclaration env c.s_class_body
 
     exception Found of s_block
 
     let interpret_program p =
-        let env = {
-            vars = Hashtbl.create 10; 
-            proc = Hashtbl.create 10;
-            records = Hashtbl.create 10;
-        }
+        let procs = Hashtbl.create 10
         in
         (* Read declarations *)
-        List.iter (interpret_class env) p;
-
+        let env = List.fold_right (fun c env -> interpret_class env procs c) p Env.empty in
 
         (* Look for main function *)
         try
-            Hashtbl.iter (fun f body -> if f.s_proc_call_name = "main" then raise (Found body)) env.proc
-        with Found body -> let _ = interpret_block env body in
+            Hashtbl.iter (fun f body -> if f.s_proc_call_name = "main" then raise (Found body)) procs
+        with Found body -> let _ = interpret_block env procs body in
         let info = Hashtbl.create 10 in
-        Hashtbl.iter (fun loc state -> Hashtbl.replace info loc (stateToString state)) env.records;
+        (*Hashtbl.iter (fun loc state -> Hashtbl.replace info loc (Env.stateToString state)) env.records;*)
         Printer.print_program_with_prop p info
 end
