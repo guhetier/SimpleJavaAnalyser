@@ -14,7 +14,7 @@ module LocOrd : (Map.OrderedType with type t = Localizing.extent) =
         type t = Localizing.extent
 
         let compare v1 v2 =
-            Pervasives.compare v1.extent_uniqueID v2.extent_uniqueID
+            Pervasives.compare (Localizing.extent_uniqueId v1) (Localizing.extent_uniqueId v2)
 
     end
 

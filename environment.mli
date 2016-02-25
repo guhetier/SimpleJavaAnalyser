@@ -1,5 +1,5 @@
 open AbstractField
-open VarMap
+open CustomMaps
 
 module type Environment = sig
 
@@ -19,9 +19,9 @@ module type Environment = sig
     val unreachable : t -> t
     val isUnreachable : t -> bool
 
+    val mergeEnv : t -> t -> t
     val recordState : t -> Localizing.extent -> t
-    val mergeState : t -> t -> t
-    val varToReduce : t -> t -> Simple_java_syntax.s_var list option
+    val varToEnlarge : t -> t -> Simple_java_syntax.s_var list option
     val enlarge : t -> Simple_java_syntax.s_var list -> t
 
  

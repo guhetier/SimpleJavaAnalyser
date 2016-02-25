@@ -1,5 +1,5 @@
 open Environment
-open VarMap
+open CustomMaps
 
 module Make (Env: Environment) = struct
 
@@ -53,7 +53,7 @@ module Make (Env: Environment) = struct
                     (*Hashtbl.replace env.vars v (Field.enlarge x)) l*)
 
     let set_block_unreachable env blk =
-        List.fold_left (fun env (_, ext) -> Env.mergeState env (Env.unreachable env)) env blk
+        List.fold_left (fun env (_, ext) -> Env.mergeEnv env (Env.unreachable env)) env blk
 
     let interpret_var env var =
         Env.getValue env var
@@ -88,7 +88,7 @@ module Make (Env: Environment) = struct
                 and env2 = interpret_block env procs blk2 in
 
                 (* Actualise outgoing env according to both branch *)
-                Env.mergeState env1 env2;
+                Env.mergeEnv env1 env2;
             end
         else if isTrue && not isFalse then
             begin
@@ -112,7 +112,7 @@ module Make (Env: Environment) = struct
                 nextEnv
             else
             let v = interpret_expr env cond in
-            match (Env.varToReduce env nextEnv) with
+            match Env.varToEnlarge env nextEnv with
             (* On a atteint un état stable*)
             | Some [] ->
                 let vext = interpret_expr nextEnv cond in
@@ -133,6 +133,7 @@ module Make (Env: Environment) = struct
                     iterLoop env
                 )
             (* On découvre du nouveau code encore non atteint *)
+            (* /!\ Comment refleter proprement ce cas ?? *)
             | None -> (if Field.isVal 0L v then
                     nextEnv
                 else
