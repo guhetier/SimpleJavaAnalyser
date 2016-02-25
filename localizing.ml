@@ -87,3 +87,7 @@ let locus_pair_to_string (l1: locus) (l2: locus): string =
       l1.locus_file_name l1.locus_file_line l1.locus_file_column
 let extent_to_string (ext: extent): string =
   locus_pair_to_string (extent_beg ext) (extent_end ext)
+
+  (* Get the id of an extent *)
+let extent_uniqueId e =
+    e.extent_unique_id
