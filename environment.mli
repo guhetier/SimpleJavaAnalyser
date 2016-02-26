@@ -21,6 +21,7 @@ module type Environment = sig
 
     val mergeEnv : t -> t -> t
     val recordState : t -> Localizing.extent -> t
+    val clearRecords : t -> t
     val varToEnlarge : t -> t -> Simple_java_syntax.s_var list option
     val enlarge : t -> Simple_java_syntax.s_var list -> t
 

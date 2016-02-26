@@ -48,6 +48,10 @@ module Make (Field: AbstractField) : Environment = struct
     let isUnreachable env =
         VarMap.for_all (fun _ v -> Field.equal v Field.unreach) env.currentState
 
+    let isStateUnreachable s =
+        VarMap.for_all (fun _ v -> Field.equal v Field.unreach) s
+
+
     let setUnreachable env loc =
         {
             currentState = env.currentState;
@@ -84,18 +88,46 @@ module Make (Field: AbstractField) : Environment = struct
             recordedStates = (LocMap.add ext (mergeState prevState env.currentState)
                                 env.recordedStates)
         }
+
+    let clearRecords env =
+        {
+            currentState = env.currentState;
+            recordedStates = LocMap.empty
+        }
         
-    (* A completer proprement *)
-    let varToEnlarge env1 env2 =
-        let res = VarMap.fold (fun k v1 m2 ->
-                let v2 = try VarMap.find k m2 with Not_found -> Field.undef in
-                if Field.equal v1 v2 then
-                    VarMap.remove k m2
-                else
-                    m2
-            ) env1.currentState env2.currentState
+    (*
+     * If new code is reach, return None
+     * Else, return the list a variable whose value changed in the loop
+     * *)
+    let varToEnlarge oldenv newenv =
+        (* Check if new code have been reach *)
+        
+        let nothingNew = LocMap.for_all (fun k s2 ->
+            if isStateUnreachable s2 then true
+            else begin
+                try
+                let s1 = LocMap.find k oldenv.recordedStates
+                in not (isStateUnreachable s1)
+                with Not_found -> false
+            end
+        ) newenv.recordedStates
         in
-        Some(List.map fst (VarMap.bindings res))
+        if not nothingNew then
+            None
+        else
+            begin
+
+                (* Look for variables which value changed *)
+                let res = VarMap.fold (fun k v1 m2 ->
+                    let v2 = try VarMap.find k m2 with Not_found -> Field.undef in
+                    if Field.equal v1 v2 then
+                        VarMap.remove k m2
+                    else
+                        m2  
+                    ) oldenv.currentState newenv.currentState
+                in
+                Some(List.map fst (VarMap.bindings res))
+            end
         
     let enlarge env l =
         List.fold_left (fun env var ->

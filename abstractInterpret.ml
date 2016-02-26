@@ -8,26 +8,6 @@ module Make (Env: Environment) = struct
     module Field = Env.Field
     type state = Env.state
 
-    (* Merge two state and return a list of modifed variables,
-     * or None if an unreach line is reach*)
-    (* TODO : See Map.merge !!!! *)
-    (*let mergeStateChange env loc field = *)
-        (*if not (Hashtbl.mem env.records loc) then*)
-            (*(Hashtbl.replace env.records loc field; None)*)
-        (*else begin*)
-            (*let prev = Hashtbl.find env.records loc in*)
-            (*Some(VarMap.fold (fun var vnew r ->*)
-                            (*let vold = VarMap.find var prev in*)
-                            (*let vmerge = Field.merge vold vnew in*)
-                            (*if (not (Field.equal vmerge vold)) then*)
-                                (*(Hashtbl.replace env.records loc (VarMap.add var vmerge prev); var::r)*)
-                            (*else*)
-                                (*r)*)
-                        (*field*)
-                        (*[]*)
-            (*)*)
-        (*end*)
-
     let set_block_unreachable env blk =
         List.fold_left (fun env (_, ext) -> Env.setUnreachable env ext) env blk
 
@@ -76,12 +56,12 @@ module Make (Env: Environment) = struct
         let env = Env.recordState env ext in
 
         let rec iterLoop env = 
-            (* TODO : si le block ne fini pas... *)
-            (* - tester la condition *)
+            (* Executer la boucle *)
             let nextEnv = interpret_block env procs blk in
             if Env.isUnreachable nextEnv then
                 nextEnv
             else
+            (* - tester la condition *)
             let v = interpret_expr env cond in
             match Env.varToEnlarge env nextEnv with
             (* On a atteint un état stable*)
@@ -104,7 +84,6 @@ module Make (Env: Environment) = struct
                     iterLoop env
                 )
             (* On découvre du nouveau code encore non atteint *)
-            (* /!\ Comment refleter proprement ce cas ?? *)
             | None -> (if Field.isVal 0L v then
                     nextEnv
                 else
@@ -135,9 +114,13 @@ module Make (Env: Environment) = struct
             (* If we don't go out of the loop in the first iterations*)
             if !i <> -1 then
                 (* Then, try to operate by enlargement *)
-                iterLoop env
+                (* We need to have an env without record to know when we reach new
+                 * code in an iteration *)
+                begin
+                    iterLoop (Env.clearRecords env) |> Env.mergeEnv env
+                end
             else
-                (* We go out of the loop : merge env and quit*)
+                (* We go out of the loop *)
                 env
             end
 
