@@ -99,18 +99,21 @@ module Make (Env: Environment) = struct
         else
             begin
             (* Else, try to execute 10 times the block : it may be enough *)
-            let i = ref 0 in
-            while !i < 10 do
-                let env = interpret_block env procs blk in
-                if Env.isUnreachable env then
-                    failwith "TODO : terminaison"
+            let i = ref 10 and renv = ref env in
+            while !i > 0 do
+                renv := interpret_block !renv procs blk;
+                if Env.isUnreachable !renv then(
+                    renv := Env.unreachable (!renv);
+                    i := -1
+                )
                 else(
-                    let v = interpret_expr env cond in
-                    i := !i + 1;
+                    let v = interpret_expr !renv cond in
+                    i := !i - 1;
                     if Field.isVal 0L v then
                         i := -1
                 )
             done;
+            let env = !renv in
             (* If we don't go out of the loop in the first iterations*)
             if !i <> -1 then
                 (* Then, try to operate by enlargement *)

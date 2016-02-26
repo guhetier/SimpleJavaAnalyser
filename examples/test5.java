@@ -3,7 +3,7 @@ class Test {
     static int b = 1;
 
     static void f(){
-        a = 10;
+        a = 12;
     }
 
     static void main()
