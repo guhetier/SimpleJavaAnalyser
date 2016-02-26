@@ -26,6 +26,9 @@ module Make (Field: AbstractField) : Environment = struct
             state []
         in String.concat ", " ss
 
+    let recordToStrings env =
+        LocMap.map stateToString env.recordedStates
+
     let getValue env var =
         try VarMap.find var env.currentState
         with Not_found -> Field.undef
@@ -44,6 +47,12 @@ module Make (Field: AbstractField) : Environment = struct
 
     let isUnreachable env =
         VarMap.for_all (fun _ v -> Field.equal v Field.unreach) env.currentState
+
+    let setUnreachable env loc =
+        {
+            currentState = env.currentState;
+            recordedStates = LocMap.add loc (VarMap.map (fun _ -> Field.unreach) env.currentState) env.recordedStates
+        }
 
     let mergeState s1 s2 =
         VarMap.merge (fun _ v1 v2 ->

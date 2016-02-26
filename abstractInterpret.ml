@@ -28,36 +28,11 @@ module Make (Env: Environment) = struct
             (*)*)
         (*end*)
 
-    (*let mergeState env loc field =*)
-        (*let _ = mergeStateChange env loc field in ()*)
-
-    (*let mergeBlk env env2 =*)
-        (*Hashtbl.fold*)
-            (*(fun loc s2 r ->*)
-                (*match mergeStateChange env loc s2, r with*)
-                (*| None, _*)
-                (*| _, None -> None*)
-                (*| Some l1, Some l2 -> Some(l1@l2)*)
-            (*)*)
-            (*env2.records*)
-            (*(Some [])*)
-
-    (*let intersectState env env2 : Env.t =*)
-        (*VarMap.iter (fun var v2 ->*)
-            (*let v1 = VarMap.find var env.vars in*)
-            (*Hashtbl.replace env.vars var (Field.intersect v1 v2))*)
-            (*env2.vars*)
-    
-    (*let enlarge_env env l =*)
-        (*List.iter (fun v -> let x = try Hashtbl.find env.vars v with Not_found -> Field.unreach in*)
-                    (*Hashtbl.replace env.vars v (Field.enlarge x)) l*)
-
     let set_block_unreachable env blk =
-        List.fold_left (fun env (_, ext) -> Env.mergeEnv env (Env.unreachable env)) env blk
+        List.fold_left (fun env (_, ext) -> Env.setUnreachable env ext) env blk
 
     let interpret_var env var =
         Env.getValue env var
-        (*try Hashtbl.find env.vars var with Not_found -> Field.undef*)
 
     let rec interpret_unary env op e =
         Field.unOp op (interpret_expr env e)
@@ -83,23 +58,19 @@ module Make (Env: Environment) = struct
         let isTrue = Field.isValIn 1L v and isFalse = Field.isValIn 0L v in
 
         if isTrue && isFalse then
-            begin
-                let env1 = interpret_block env procs blk1
-                and env2 = interpret_block env procs blk2 in
+            let env1 = interpret_block env procs blk1
+            and env2 = interpret_block env procs blk2 in
 
-                (* Actualise outgoing env according to both branch *)
-                Env.mergeEnv env1 env2;
-            end
+            (* Actualise outgoing env according to both branch *)
+            Env.mergeEnv env1 env2
+
         else if isTrue && not isFalse then
-            begin
-                let env = set_block_unreachable env blk2 in
-                interpret_block env procs blk1
-            end
+            let env = set_block_unreachable env blk2 in
+            interpret_block env procs blk1
+
         else (* isFalse && not isTrue*)
-            begin
-                let env = set_block_unreachable env blk2 in
-                interpret_block env procs blk2
-            end;
+            let env = set_block_unreachable env blk1 in
+            interpret_block env procs blk2
 
     and interpret_loop env procs ext cond blk =
         let env = Env.recordState env ext in
@@ -239,10 +210,11 @@ module Make (Env: Environment) = struct
         let env = List.fold_right (fun c env -> interpret_class env procs c) p Env.empty in
 
         (* Look for main function *)
-        try
-            Hashtbl.iter (fun f body -> if f.s_proc_call_name = "main" then raise (Found body)) procs
-        with Found body -> let _ = interpret_block env procs body in
-        let info = Hashtbl.create 10 in
-        (*Hashtbl.iter (fun loc state -> Hashtbl.replace info loc (Env.stateToString state)) env.records;*)
-        Printer.print_program_with_prop p info
+        let body = try
+            Hashtbl.iter (fun f body -> if f.s_proc_call_name = "main" then raise (Found body)) procs; []
+        with Found body -> body
+        in
+        let finalEnv = interpret_block env procs body in
+        let finalEnv = Env.recordState finalEnv (Localizing.extent_unknown()) in
+        Printer.print_program_with_prop p (Env.recordToStrings finalEnv)
 end

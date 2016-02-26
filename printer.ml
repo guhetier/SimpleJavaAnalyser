@@ -1,5 +1,6 @@
 
 open Simple_java_syntax
+open CustomMaps
 
 (*
  * Print a simple Java programm from Syntax tree
@@ -17,7 +18,12 @@ let print_indent () =
     print_string (String.make !indent ' ')
 
 let print_info info loc =
-    try print_indent (); Printf.printf "// %s\n" (Hashtbl.find info loc) with Not_found -> print_newline ()
+    try
+        let s = LocMap.find loc info in
+        if s = "" then raise Not_found;
+        print_indent ();
+        Printf.printf "// %s\n" s
+    with Not_found -> ()
 
 (*
  * Interpret variable access
@@ -75,7 +81,6 @@ let print_assign var expr =
  * Interpret conditions
  *)
 let rec print_condition info cond blk1 blk2 =
-    print_newline ();
     print_indent ();
     Printf.printf "if(%s){\n" (print_expr cond);
     inc_indent();
@@ -126,13 +131,13 @@ and print_assert expr =
  * Interpret instructions
  *)
 and print_command info (cmd, loc) =
-    (match cmd with
+    print_info info loc;
+    match cmd with
     | Sc_assign (var, expr)    -> print_assign var expr
     | Sc_if (cond, blk1, blk2) -> print_condition info cond blk1 blk2
     | Sc_while (cond, blk)     -> print_loop info cond blk
     | Sc_proc_call proc        -> print_proc proc
-    | Sc_assert expr           -> print_assert expr);
-    print_info info loc
+    | Sc_assert expr           -> print_assert expr
 
 (*
  * Interpret block of instructions
@@ -146,6 +151,7 @@ and print_block info blk =
  * List and initialize variable declaration
  *)
 let print_var_decl info (var,init) =
+    print_info info var.s_var_extent;
     print_indent ();
     Printf.printf "%s %s%s;\n"
     (match var.s_var_type with
@@ -155,8 +161,7 @@ let print_var_decl info (var,init) =
     var.s_var_name
     (match init with
     | None -> ""
-    | Some e -> Printf.sprintf " = %s" (print_expr e));
-    print_info info var.s_var_extent
+    | Some e -> Printf.sprintf " = %s" (print_expr e))
 
 (*
  * List and store functions
@@ -203,10 +208,11 @@ let print_program_with_prop (p:s_program) info : unit =
     let rec readDeclarations l = match l with
     | []   -> ()
     | h::q -> print_class info h; readDeclarations q
-    in readDeclarations p
+    in readDeclarations p;
+    print_info info (Localizing.extent_unknown())
     
 let print_program (p:s_program) : unit =
-    print_program_with_prop p (Hashtbl.create 1)
+    print_program_with_prop p (LocMap.empty)
 
 
 
