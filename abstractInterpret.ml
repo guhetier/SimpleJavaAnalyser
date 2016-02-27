@@ -10,6 +10,7 @@ module Make (Env: Environment) = struct
 
     let set_block_unreachable env blk =
         List.fold_left (fun env (_, ext) -> Env.setUnreachable env ext) env blk
+        |> Env.unreachable
 
     let interpret_var env var =
         Env.getValue env var
@@ -62,44 +63,47 @@ module Make (Env: Environment) = struct
                 nextEnv
             else
             (* - tester la condition *)
-            let v = interpret_expr env cond in
-            match Env.varToEnlarge env nextEnv with
-            (* On a atteint un état stable*)
-            | Some [] ->
-                let vext = interpret_expr nextEnv cond in
-                (* On boucle de manière certaine *)
-                if(Field.isVal 1L vext) then
-                    Env.unreachable nextEnv
-                else
-                    nextEnv
-            (* Des variables ont évoluées *)
-            | Some l ->
-                (* On sort de la boucle en ne vérifiant plus la condition.
-                 * On est donc dans l'état courant après la boucle *)
-                (if Field.isVal 0L v then
-                        nextEnv
-                else
-                    (* elargir les variables qui ont changés *)
-                    let env = Env.enlarge nextEnv l in
-                    iterLoop env
-                )
-            (* On découvre du nouveau code encore non atteint *)
-            | None -> (if Field.isVal 0L v then
-                    nextEnv
-                else
-                    iterLoop nextEnv)
+            let v = interpret_expr nextEnv cond in
+            (* Si la condition est forcément fausse, on sort de la boucle *)
+            if Field.isVal 0L v then
+                nextEnv
+            else
+                begin
+                    match Env.varToEnlarge env nextEnv with
+                    (* On a atteint un état stable*)
+                    | Some [] ->
+                        (* On boucle de manière certaine *)
+                        if Field.isVal 1L v then
+                            Env.unreachable nextEnv
+                        else
+                            nextEnv
+                    (* Des variables ont évoluées *)
+                    | Some l ->
+                    (* On sort de la boucle en ne vérifiant plus la condition.
+                     * On est donc dans l'état courant après la boucle *)
+                        (if Field.isVal 0L v then
+                            nextEnv
+                        else
+                            (* elargir les variables qui ont changés *)
+                            let env = Env.enlarge nextEnv l in
+                            iterLoop env
+                        )
+                    (* On découvre du nouveau code encore non atteint *)
+                    | None -> (if Field.isVal 0L v then
+                            nextEnv
+                        else
+                            iterLoop nextEnv)
+                end
         in
 
         let v = interpret_expr env cond in
         (* If we never enter the loop *)
-        if (Field.isVal 0L v) then
-            begin
-            set_block_unreachable env blk;
-            end
+        if Field.isVal 0L v then
+            set_block_unreachable env blk
         else
             begin
-            (* Else, try to execute 10 times the block : it may be enough *)
-            let i = ref 10 and renv = ref env in
+            (* Else, try to execute 3 times the block : it may be enough *)
+            let i = ref 3 and renv = ref env in
             while !i > 0 do
                 renv := interpret_block !renv procs blk;
                 if Env.isUnreachable !renv then(
@@ -113,18 +117,15 @@ module Make (Env: Environment) = struct
                         i := -1
                 )
             done;
-            let env = !renv in
             (* If we don't go out of the loop in the first iterations*)
             if !i <> -1 then
                 (* Then, try to operate by enlargement *)
                 (* We need to have an env without record to know when we reach new
                  * code in an iteration *)
-                begin
-                    iterLoop (Env.clearRecords env) |> Env.mergeEnv env
-                end
+                iterLoop (Env.clearRecords !renv) |> Env.mergeEnv (Env.unreachable env)
             else
                 (* We go out of the loop *)
-                env
+                !renv
             end
 
     and interpret_proc env procs ext proc =
